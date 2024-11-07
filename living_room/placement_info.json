@@ -728,7 +728,7 @@
         "kettle_0": {
             "parent": "tall_storage_cabinet_0",
             "SpatialRel": "on",
-            "againstWall": "wall_2",
+            "againstWall": "wall_0",
             "directlyFacing": null,
             "retrieved_asset": "SM_Pitcher",
             "pose": [
@@ -935,7 +935,7 @@
         "small_kitchen_storage_jar_0": {
             "parent": "tall_storage_cabinet_0",
             "SpatialRel": "on",
-            "againstWall": "wall_2",
+            "againstWall": "wall_0",
             "directlyFacing": null,
             "retrieved_asset": "SM_kitchen_Canisters01_C",
             "pose": [
@@ -978,7 +978,7 @@
         "tall_storage_cabinet_0": {
             "parent": "floor_0",
             "SpatialRel": "on",
-            "againstWall": "wall_2",
+            "againstWall": "wall_0",
             "directlyFacing": null,
             "retrieved_asset": "SM_lockers_01",
             "pose": [
@@ -1021,7 +1021,7 @@
         "tall_storage_cabinet_1": {
             "parent": "floor_0",
             "SpatialRel": "on",
-            "againstWall": "wall_1",
+            "againstWall": "wall_0",
             "directlyFacing": null,
             "retrieved_asset": "SM_BookShelf_02",
             "pose": [
@@ -1107,7 +1107,7 @@
         "vase_0": {
             "parent": "tall_storage_cabinet_1",
             "SpatialRel": "inside",
-            "againstWall": "wall_1",
+            "againstWall": "wall_0",
             "directlyFacing": null,
             "retrieved_asset": "SM_Decor_Vase_06",
             "pose": [
@@ -1150,7 +1150,7 @@
         "vase_1": {
             "parent": "tall_storage_cabinet_1",
             "SpatialRel": "inside",
-            "againstWall": "wall_1",
+            "againstWall": "wall_0",
             "directlyFacing": null,
             "retrieved_asset": "SM_Vase_3",
             "pose": [
@@ -1236,7 +1236,7 @@
         "vase_3": {
             "parent": "tall_storage_cabinet_1",
             "SpatialRel": "inside",
-            "againstWall": "wall_1",
+            "againstWall": "wall_0",
             "directlyFacing": null,
             "retrieved_asset": "SM_Vase_1",
             "pose": [
@@ -1322,7 +1322,7 @@
         "vase_5": {
             "parent": "tall_storage_cabinet_0",
             "SpatialRel": "on",
-            "againstWall": "wall_2",
+            "againstWall": "wall_0",
             "directlyFacing": null,
             "retrieved_asset": "SM_Vase_2",
             "pose": [

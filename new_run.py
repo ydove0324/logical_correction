@@ -5,6 +5,7 @@ import os
 import math
 import re
 import json
+import sys
 
 def import_fbx(filepath):
     bpy.ops.import_scene.fbx(filepath=filepath)
@@ -184,10 +185,8 @@ def process_directly_facing(obj_info, obj_list, obj_dimensions):
 
 CARPET = ["carpet_0","rug_0"]
 
-def main():
-
+def main(base_dir):
     # 读取JSON文件
-    base_dir = "living_room"
     obj_placement_info_json_path = f"{base_dir}/placement_info.json"
     with open(obj_placement_info_json_path, 'r') as f:
         obj_placement_info = json.load(f)
@@ -244,16 +243,16 @@ def main():
             # update_matrix_world(obj)
             # if instance_id == "coffee_table_0":
             #     print("!!!!!!",obj.rotation_euler[0],obj.rotation_euler[1],obj.location)
+
+    process_z(faId=ground_name,obj_list=obj_list,tree_sons=tree_sons,height=0)     # 更新 z 轴
+    # for instance_id, info in obj_placement_info['obj_info'].items():
+    #     if info["parent"] is not None and not re.match(r"wall_\d+", info["parent"]):
+    #         if info["parent"] in obj_list and info["SpatialRel"] == "inside":
+    #             obj_list[instance_id].parent = obj_list[info["parent"]]
+    process_against_wall(obj_placement_info["obj_info"],obj_list,obj_dimensions)
     for instance_id, info in obj_placement_info["obj_info"].items():
         if re.match(r"wall_\d+", instance_id):
             process_wall(instance_id,obj_placement_info["obj_info"],obj_list,ground_name)
-    process_z(faId=ground_name,obj_list=obj_list,tree_sons=tree_sons,height=0)     # 更新 z 轴
-    for instance_id, info in obj_placement_info['obj_info'].items():
-        if info["parent"] is not None and info["parent"][0:4] != "wall":
-            if info["parent"] in obj_list and info["SpatialRel"] == "inside":
-                obj_list[instance_id].parent = obj_list[info["parent"]]
-    # for instance_id in processed_matrix:
-    #     processed_matrix[instance_id] = processed_matrix[instance_id] @ Matrix.Translation(Vector((0,0,delta_zs[instance_id])))
     process_against_wall(obj_placement_info["obj_info"],obj_list,obj_dimensions)
     process_directly_facing(obj_placement_info["obj_info"], obj_list, obj_dimensions)
 
@@ -276,6 +275,18 @@ def main():
     bpy.context.view_layer.update()
 
 if __name__ == "__main__":
+    # Blender 会将自己的参数放在前面，用户的参数在 "--" 之后
+    # 查找 "--" 之后的第一个参数作为 base_dir
+    argv = sys.argv
+    try:
+        index = argv.index("--") + 1
+        base_dir = argv[index]
+    except (ValueError, IndexError):
+        print("Error: Please provide base_dir after '--' in command line arguments")
+        print("Example: blender -b -P new_run.py -- /path/to/base_dir")
+        sys.exit(1)
+    
     bpy.ops.object.select_all(action="SELECT")
     bpy.ops.object.delete()
-    main()
+    print("Processing directory:", base_dir)
+    main(base_dir)

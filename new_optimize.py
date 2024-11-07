@@ -266,4 +266,4 @@ if __name__ == "__main__":
             # final_position[instance_id] = {"x": bbox['x'], "y": bbox['y']}
     print(calc_overlap_area(optimized_state, bboxs, bbox_items,obj_info,debug_mode=True))
     print(calc_constraints(optimized_state, bboxs, bbox_items))
-    save_to_json(f"{args.base_dir}/final_position_anneal.json", final_position)
+    save_to_json(f"{args.base_dir}/final_pos.json", final_position)
