@@ -1,0 +1,134 @@
+{
+    "instance_0_dining_chairs_0": {
+        "parent": "floor",
+        "onWall": false,
+        "onCeiling": false,
+        "facing": "instance_14_dining_table_0"
+    },
+    "instance_1_dining_chairs_1": {
+        "parent": "floor",
+        "onWall": false,
+        "onCeiling": false,
+        "facing": "instance_14_dining_table_0"
+    },
+    "instance_2_sideboard_0": {
+        "parent": "floor",
+        "onWall": true,
+        "onCeiling": false,
+        "facing": null
+    },
+    "instance_3_table_lamp_0": {
+        "parent": "instance_2_sideboard_0",
+        "onWall": false,
+        "onCeiling": false,
+        "facing": null
+    },
+    "instance_4_dining_chairs_2": {
+        "parent": "floor",
+        "onWall": false,
+        "onCeiling": false,
+        "facing": "instance_14_dining_table_0"
+    },
+    "instance_5_dining_chairs_3": {
+        "parent": "floor",
+        "onWall": false,
+        "onCeiling": false,
+        "facing": "instance_14_dining_table_0"
+    },
+    "instance_7_round_tray_0": {
+        "parent": "instance_14_dining_table_0",
+        "onWall": false,
+        "onCeiling": false,
+        "facing": null
+    },
+    "instance_8_dining_chairs_4": {
+        "parent": "floor",
+        "onWall": false,
+        "onCeiling": false,
+        "facing": "instance_14_dining_table_0"
+    },
+    "instance_9_red_fruit_0": {
+        "parent": "instance_7_round_tray_0",
+        "onWall": false,
+        "onCeiling": false,
+        "facing": null
+    },
+    "instance_10_floor_rug_0": {
+        "parent": "floor",
+        "onWall": false,
+        "onCeiling": false,
+        "facing": null
+    },
+    "instance_11_red_fruit_1": {
+        "parent": "instance_7_round_tray_0",
+        "onWall": false,
+        "onCeiling": false,
+        "facing": null
+    },
+    "instance_12_chandelier_0": {
+        "parent": null,
+        "onWall": false,
+        "onCeiling": true,
+        "facing": null
+    },
+    "instance_13_wall_art_0": {
+        "parent": null,
+        "onWall": true,
+        "onCeiling": false,
+        "facing": null
+    },
+    "instance_14_dining_table_0": {
+        "parent": "floor",
+        "onWall": false,
+        "onCeiling": false,
+        "facing": null
+    },
+    "instance_16_wall_art_1": {
+        "parent": null,
+        "onWall": true,
+        "onCeiling": false,
+        "facing": null
+    },
+    "instance_17_pot_plant_0": {
+        "parent": "floor",
+        "onWall": false,
+        "onCeiling": false,
+        "facing": null
+    },
+    "instance_18_wall_art_2": {
+        "parent": null,
+        "onWall": true,
+        "onCeiling": false,
+        "facing": null
+    },
+    "instance_19_wall_art_3": {
+        "parent": null,
+        "onWall": true,
+        "onCeiling": false,
+        "facing": null
+    },
+    "instance_22_wall_art_4": {
+        "parent": null,
+        "onWall": true,
+        "onCeiling": false,
+        "facing": null
+    },
+    "instance_23_wall_art_5": {
+        "parent": null,
+        "onWall": true,
+        "onCeiling": false,
+        "facing": null
+    },
+    "instance_24_pot_plant_1": {
+        "parent": "instance_2_sideboard_0",
+        "onWall": false,
+        "onCeiling": false,
+        "facing": null
+    },
+    "instance_25_pot_plant_2": {
+        "parent": "instance_7_round_tray_0",
+        "onWall": false,
+        "onCeiling": false,
+        "facing": null
+    }
+}

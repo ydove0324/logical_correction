@@ -1,0 +1,98 @@
+{
+    "instance_18_coffee_table_0": {
+        "parent": "instance_24_rug_0",
+        "simulation": false
+    },
+    "instance_0_white_pillow_0": {
+        "parent": "instance_7_bed_0",
+        "simulation": true
+    },
+    "instance_10_wall_art_1": {
+        "parent": "None",
+        "simulation": false
+    },
+    "instance_11_plant_0": {
+        "parent": "instance_18_coffee_table_0",
+        "simulation": true
+    },
+    "instance_12_chandelier_0": {
+        "parent": "None",
+        "simulation": false
+    },
+    "instance_13_wall_art_2": {
+        "parent": "None",
+        "simulation": false
+    },
+    "instance_14_tv_stand_0": {
+        "parent": "floor",
+        "simulation": false
+    },
+    "instance_15_wall_art_3": {
+        "parent": "None",
+        "simulation": false
+    },
+    "instance_16_wall_art_4": {
+        "parent": "None",
+        "simulation": false
+    },
+    "instance_17_tv_0": {
+        "parent": "instance_14_tv_stand_0",
+        "simulation": false
+    },
+    "instance_19_wall_art_5": {
+        "parent": "None",
+        "simulation": false
+    },
+    "instance_1_white_pillow_1": {
+        "parent": "instance_7_bed_0",
+        "simulation": true
+    },
+    "instance_20_cup_0": {
+        "parent": "instance_23_bedside_table_0",
+        "simulation": true
+    },
+    "instance_21_armchairs_0": {
+        "parent": "instance_24_rug_0",
+        "simulation": true
+    },
+    "instance_22_cup_1": {
+        "parent": "instance_23_bedside_table_0",
+        "simulation": true
+    },
+    "instance_23_bedside_table_0": {
+        "parent": "floor",
+        "simulation": false
+    },
+    "instance_24_rug_0": {
+        "parent": "floor",
+        "simulation": true
+    },
+    "instance_2_grey_pillow_0": {
+        "parent": "instance_7_bed_0",
+        "simulation": true
+    },
+    "instance_3_grey_pillow_1": {
+        "parent": "instance_7_bed_0",
+        "simulation": true
+    },
+    "instance_4_lamp_0": {
+        "parent": "instance_23_bedside_table_0",
+        "simulation": true
+    },
+    "instance_5_books_0": {
+        "parent": "instance_18_coffee_table_0",
+        "simulation": true
+    },
+    "instance_7_bed_0": {
+        "parent": "floor",
+        "simulation": true
+    },
+    "instance_8_wardrobe_0": {
+        "parent": "floor",
+        "simulation": false
+    },
+    "instance_9_wall_art_0": {
+        "parent": "None",
+        "simulation": false
+    }
+}

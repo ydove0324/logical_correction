@@ -1,0 +1,7 @@
+# 压缩文件
+*.rar
+*.tar
+
+# FBX文件
+*.fbx
+blender/*

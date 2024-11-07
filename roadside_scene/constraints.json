@@ -1,0 +1,77 @@
+{
+    "instance_1_toolbox_0": {
+        "parent": "floor",
+        "onWall": false,
+        "onCeiling": false
+    },
+    "instance_2_ladder_0": {
+        "parent": "floor",
+        "onWall": true,
+        "onCeiling": false
+    },
+    "instance_3_toolbox_1": {
+        "parent": "floor",
+        "onWall": false,
+        "onCeiling": false
+    },
+    "instance_4_wall_0": {
+        "parent": "floor",
+        "onWall": false,
+        "onCeiling": false
+    },
+    "instance_5_sign_0": {
+        "parent": "None",
+        "onWall": true,
+        "onCeiling": false
+    },
+    "instance_6_toolbox_2": {
+        "parent": "instance_7_tarp_covered_object_0",
+        "onWall": false,
+        "onCeiling": false
+    },
+    "instance_7_tarp_covered_object_0": {
+        "parent": "floor",
+        "onWall": false,
+        "onCeiling": false
+    },
+    "instance_8_wooden_crate_0": {
+        "parent": "floor",
+        "onWall": true,
+        "onCeiling": false
+    },
+    "instance_9_toolbox_3": {
+        "parent": "floor",
+        "onWall": false,
+        "onCeiling": false
+    },
+    "instance_10_bottle_0": {
+        "parent": "floor",
+        "onWall": false,
+        "onCeiling": false
+    },
+    "instance_11_screwdriver_0": {
+        "parent": "floor",
+        "onWall": false,
+        "onCeiling": false
+    },
+    "instance_12_screwdriver_1": {
+        "parent": "floor",
+        "onWall": false,
+        "onCeiling": false
+    },
+    "instance_13_metal_barrel_0": {
+        "parent": "floor",
+        "onWall": false,
+        "onCeiling": false
+    },
+    "instance_14_bottle_1": {
+        "parent": "floor",
+        "onWall": false,
+        "onCeiling": false
+    },
+    "instance_15_metal_profiles_0": {
+        "parent": "floor",
+        "onWall": false,
+        "onCeiling": false
+    }
+}
