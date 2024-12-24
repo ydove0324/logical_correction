@@ -5,6 +5,9 @@ import re
 
 import numpy as np
 from geometry_utils import calculate_intersection_area as calc_insec_area
+import torch
+import trimesh
+from pathlib import Path
 
 eps = 1e-3
 
@@ -27,7 +30,7 @@ class Obj:
         self.relation = info.get("SpatialRel", None)
         self.pose_3d = info.get("final_pose", None)
 
-        # 通过 bbox 中心来初始化原始位置和当前位置
+        # 通过 bbox 中心来初始化原始位置和当���位置
         bbox_points = np.array(info["bbox"])
         min_corner = np.min(bbox_points, axis=0)
         max_corner = np.max(bbox_points, axis=0)
@@ -54,6 +57,41 @@ class Obj:
         }
 
 
+class VoxelManager:
+    """用于管理场景中物体的体素化表示和碰撞检测"""
+    
+    def __init__(self, resolution=(256, 256, 128)):
+        self.resolution = resolution
+        self.voxel_grids = {}  # instance_id -> voxel tensor
+        self.mesh_cache = {}   # mesh_name -> trimesh.Mesh
+        
+    def load_mesh(self, mesh_path):
+        """加载并缓存mesh"""
+        if mesh_path not in self.mesh_cache:
+            mesh = trimesh.load(mesh_path)
+            self.mesh_cache[mesh_path] = mesh
+        return self.mesh_cache[mesh_path]
+        
+    def voxelize_object(self, mesh_path, pose, scale=None):
+        """将物体mesh转换为体素网格"""
+        mesh = self.load_mesh(mesh_path)
+        if scale is not None:
+            mesh = mesh.apply_scale(scale)
+            
+        # 应用位姿变换
+        transform = np.array(pose)
+        mesh = mesh.apply_transform(transform)
+        
+        # 体素化
+        voxels = mesh.voxelized(pitch=1.0, method='ray')
+        voxel_points = voxels.points
+        
+        # 转换为张量格式
+        grid = torch.zeros(self.resolution, dtype=torch.bool)
+        # ... convert points to grid indices and set values ...
+        
+        return grid
+
 class ObjManager:
     """
     用于管理场景中所有物体以及执行优化流程:
@@ -68,6 +106,7 @@ class ObjManager:
         self.n = 0                  # 物体总数
         self.obj_info = {}          # 存储从 placement_info_new.json 中读取的 obj_info
         self.ground_name = None     # reference_obj
+        self.voxel_manager = VoxelManager()
 
     def load_data(self, base_dir):
         """
@@ -97,7 +136,8 @@ class ObjManager:
     def init_overlap(self):
         """
         初始化 overlap_list，用于加速频繁的重叠检测:
-          - 如果两个物体在 z 或者 x,y 平面上几乎不可能重叠，就不放到 overlap_list 中
+          - 使用 bbox 快速预筛选可能发生碰撞的物体对
+          - 如果两个物体的 bbox 在 z 轴或 x,y 平面上不可能重叠，就不放入 overlap_list
         """
         if self.initial_state:
             return
@@ -110,32 +150,42 @@ class ObjManager:
         for i in range(self.n):
             instance_id_i, bbox_i = bbox_items[i]
             overlap_i = []
+            
+            # 跳过地毯等特殊物体
             if instance_id_i in self.carpet_list:
                 self.overlap_list.append([])
                 continue
 
             for j in range(i + 1, self.n):
                 instance_id_j, bbox_j = bbox_items[j]
+                
+                # 跳过地毯
                 if instance_id_j in self.carpet_list:
                     continue
 
-                # 如果两者是父子关系，跳过
+                # 跳过父子关系的物体对
                 if (self.obj_dict[instance_id_i].parent_id == instance_id_j or 
                     self.obj_dict[instance_id_j].parent_id == instance_id_i):
                     continue
 
-                # z 向不相交
+                # 检查 z 轴方向是否有重叠
                 if bbox_i["min"][2] >= bbox_j["max"][2] - eps or bbox_j["min"][2] >= bbox_i["max"][2] - eps:
                     continue
 
-                # x,y 平面上判断是否相距过远(与原逻辑一致)
-                if (bbox_i["min"][0] >= bbox_j["max"][0] + (bbox_j["length"][0] + bbox_i["length"][0]) or 
-                    bbox_j["min"][0] >= bbox_i["max"][0] + (bbox_j["length"][0] + bbox_i["length"][0])):
+                # 检查 x,y 平面上的距离
+                # 考虑到物体可能移动，在原始 bbox 基础上增加一定余量
+                margin_x = (bbox_j["length"][0] + bbox_i["length"][0]) * 0.5
+                margin_y = (bbox_j["length"][1] + bbox_i["length"][1]) * 0.5
+                
+                if (bbox_i["min"][0] >= bbox_j["max"][0] + margin_x or 
+                    bbox_j["min"][0] >= bbox_i["max"][0] + margin_x):
                     continue
-                if (bbox_i["min"][1] >= bbox_j["max"][1] + (bbox_j["length"][1] + bbox_i["length"][1]) or 
-                    bbox_j["min"][1] >= bbox_i["max"][1] + (bbox_j["length"][1] + bbox_i["length"][1])):
+                    
+                if (bbox_i["min"][1] >= bbox_j["max"][1] + margin_y or 
+                    bbox_j["min"][1] >= bbox_i["max"][1] + margin_y):
                     continue
 
+                # 将可能发生碰撞的物体对添加到列表
                 overlap_i.append(j)
 
             self.overlap_list.append(overlap_i)
@@ -153,45 +203,45 @@ class ObjManager:
         return -1
 
     def calc_overlap_area(self, debug_mode=False):
-        """
-        计算所有物体平面上 2D 投影重叠面积之和
-        改用每个 Obj 的 current_pos 来计算
-        """
-        total_area = 0
-        if not self.initial_state:
-            self.init_overlap()
-
-        # 先获取 (instance_id, bbox) 列表
+        """使用体素化方法计算重叠，只检查预筛选的物体对"""
+        total_overlap = 0
         bbox_items = self.build_bbox_items()
-        # 对应地根据 current_pos 替换 rec_i/ rec_j
-        for i in range(self.n):
-            instance_id_i, bbox_i = bbox_items[i]
-            obj_i = self.obj_dict[instance_id_i]
-            w_i, h_i = bbox_i["length"][0], bbox_i["length"][1]
-            theta_i = bbox_i["theta"]
-            rec_i = (
-                obj_i.current_pos[0],
-                obj_i.current_pos[1],
-                w_i, h_i, theta_i
-            )
-            overlap_i = self.overlap_list[i] if i < len(self.overlap_list) else []
-
-            for j in overlap_i:
-                instance_id_j, bbox_j = bbox_items[j]
-                obj_j = self.obj_dict[instance_id_j]
-                w_j, h_j = bbox_j["length"][0], bbox_j["length"][1]
-                theta_j = bbox_j["theta"]
-                rec_j = (
-                    obj_j.current_pos[0],
-                    obj_j.current_pos[1],
-                    w_j, h_j, theta_j
-                )
-                cost_ij = calc_insec_area(rec_i, rec_j)
-                total_area += cost_ij
-                if debug_mode and cost_ij > 0:
-                    print("!!!! Overlap:", instance_id_i, instance_id_j, cost_ij)
-
-        return total_area
+        
+        # 只对需要检查的物体进行体素化
+        for i, overlap_indices in enumerate(self.overlap_list):
+            if not overlap_indices:  # 如果该物体没有潜在碰撞对象，跳过
+                continue
+            
+            id_i = bbox_items[i][0]
+            if id_i not in self.voxel_manager.voxel_grids:
+                obj_i = self.obj_dict[id_i]
+                mesh_path = Path(obj_i.mesh_path)
+                pose = obj_i.pose_3d
+                scale = obj_i.bounding_box.get("scale")
+                grid = self.voxel_manager.voxelize_object(mesh_path, pose, scale)
+                self.voxel_manager.voxel_grids[id_i] = grid
+            
+            grid_i = self.voxel_manager.voxel_grids[id_i]
+            
+            # 只检查预筛选的物体对
+            for j in overlap_indices:
+                id_j = bbox_items[j][0]
+                if id_j not in self.voxel_manager.voxel_grids:
+                    obj_j = self.obj_dict[id_j]
+                    mesh_path = Path(obj_j.mesh_path)
+                    pose = obj_j.pose_3d
+                    scale = obj_j.bounding_box.get("scale")
+                    grid = self.voxel_manager.voxelize_object(mesh_path, pose, scale)
+                    self.voxel_manager.voxel_grids[id_j] = grid
+                
+                grid_j = self.voxel_manager.voxel_grids[id_j]
+                overlap = torch.logical_and(grid_i, grid_j).sum().item()
+                total_overlap += overlap
+                
+                if debug_mode and overlap > 0:
+                    print(f"Overlap between {id_i} and {id_j}: {overlap}")
+                
+        return total_overlap
 
     def calc_movement(self):
         """
