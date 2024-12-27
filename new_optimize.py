@@ -8,6 +8,8 @@ import torch
 import trimesh
 from pathlib import Path
 import pyassimp
+import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
 
 eps = 1e-3
 base_fbx_path = "./fbx"
@@ -59,9 +61,9 @@ class Obj:
 
 
 class VoxelManager:
-    """用于管理场景中物体的体素化表示和碰撞检测"""
+    """用于管理场景中��示和碰撞检测"""
     
-    def __init__(self, resolution=(256, 256, 128)):
+    def __init__(self, resolution=(128, 128, 128)):
         self.resolution = resolution
         self.voxel_grids = {}  # instance_id -> voxel tensor
         self.mesh_cache = {}   # mesh_name -> trimesh.Mesh
@@ -72,26 +74,96 @@ class VoxelManager:
         self.voxel_size = None
         self.scene_initialized = False
         
-    def initialize_scene_bounds(self, obj_dict):
-        """预先计算整个场景的边界"""
+    def initialize_scene_bounds(self, obj_dict, wall_dict):
+        """预先计算整个场景的边界，并确定墙面的边界约束"""
         if self.scene_initialized:
             return
+        
+        # 标准方向向量
+        standard_directions = {
+            'left': np.array([1, 0, 0]),    # 左边的墙正方向指向右边
+            'right': np.array([-1, 0, 0]),
+            'front': np.array([0, -1, 0]),
+            'back': np.array([0, 1, 0])
+        }
+        
+        # 初始化墙面约束字典
+        self.wall_constraints = {}
+        
+        # 处理墙面
+        for wall_id, wall_info in wall_dict.items():
+            if not wall_id.startswith('wall'):
+                continue
             
-        # 遍历所有物体计算场景边界
+            # 获取墙面的pose矩阵
+            wall_pose = np.array(wall_info['pose'])
+            # 计算墙���的法向量
+            wall_normal = wall_pose[:3, :3] @ np.array([0, 0, 1])
+            wall_normal = wall_normal / np.linalg.norm(wall_normal)
+            
+            # 将原点变换到墙面坐标系
+            wall_point = wall_pose[:3, 3]  # 获取平移部分
+            
+            # 找到最匹配的标准方向
+            wall_type = max(standard_directions.items(), 
+                          key=lambda x: np.dot(wall_normal, x[1]))[0]
+            
+            # 根据墙面类型更新对应的边界约束
+            if wall_type == 'left':
+                self.wall_constraints['left'] = wall_point[0]
+            elif wall_type == 'right':
+                self.wall_constraints['right'] = wall_point[0]
+            elif wall_type == 'front':
+                self.wall_constraints['front'] = wall_point[1]
+            elif wall_type == 'back':
+                self.wall_constraints['back'] = wall_point[1]
+            
+            print(f"Wall {wall_id} classified as {wall_type} with constraint value {wall_point}")
+        
+        print("Final wall constraints:", self.wall_constraints)
+        
+        # 原有的场景边界计算逻辑
         for inst_id, obj in obj_dict.items():
             mesh = self.load_mesh(obj.fbx_path)
-            if obj.bounding_box.get("scale") is not None:
-                mesh = mesh.apply_scale(obj.bounding_box["scale"])
             if obj.pose_3d is not None:
+                mesh = mesh.copy()
                 mesh = mesh.apply_transform(obj.pose_3d)
             
             bounds = mesh.bounds
             self.scene_bounds['min'] = np.minimum(self.scene_bounds['min'], bounds[0])
             self.scene_bounds['max'] = np.maximum(self.scene_bounds['max'], bounds[1])
         
-        # 计算体素大小
-        scene_size = np.array(self.scene_bounds['max']) - np.array(self.scene_bounds['min'])
+        SCENE_MARGIN_FACTOR = 0.25
+        original_scene_size = (np.array(self.scene_bounds['max']) - np.array(self.scene_bounds['min']))
+        # 使用墙面约束更新场景边界
+        if 'left' in self.wall_constraints:
+            self.scene_bounds['min'][0] = min(self.wall_constraints['left'],self.scene_bounds['min'][0])
+        else:
+            self.scene_bounds['min'][0] -= SCENE_MARGIN_FACTOR * original_scene_size[0]
+
+        if 'right' in self.wall_constraints:
+            self.scene_bounds['max'][0] = max(self.wall_constraints['right'],self.scene_bounds['max'][0])
+        else:
+            self.scene_bounds['max'][0] += SCENE_MARGIN_FACTOR * original_scene_size[0]
+
+        if 'back' in self.wall_constraints:
+            self.scene_bounds['min'][1] = min(self.wall_constraints['back'],self.scene_bounds['min'][1])
+        else:
+            print("before",self.scene_bounds['min'][1])
+            self.scene_bounds['min'][1] -= SCENE_MARGIN_FACTOR * original_scene_size[1]
+            print("after",self.scene_bounds['min'][1])
+
+        if 'front' in self.wall_constraints:
+            self.scene_bounds['max'][1] = max(self.wall_constraints['front'],self.scene_bounds['max'][1])
+        else:
+            self.scene_bounds['max'][1] += SCENE_MARGIN_FACTOR * original_scene_size[1]
+        
+        scene_size = (np.array(self.scene_bounds['max']) - np.array(self.scene_bounds['min']))
         self.voxel_size = scene_size / np.array(self.resolution)
+        self.voxel_size = np.array([min(self.voxel_size)] * 3)
+        self.resolution = (int(round(scene_size[0] / self.voxel_size[0])),
+                           int(round(scene_size[1] / self.voxel_size[1])),
+                           int(round(scene_size[2] / self.voxel_size[2])))
         self.scene_initialized = True
         
         print("Scene bounds:", self.scene_bounds)
@@ -109,7 +181,7 @@ class VoxelManager:
             # 获取第一个mesh
             mesh = scene.meshes[0]
             
-            # 转换为 trimesh
+            # 转���为 trimesh
             vertices = np.array(mesh.vertices)
             faces = np.array(mesh.faces)
         
@@ -119,12 +191,12 @@ class VoxelManager:
         """加载并缓存mesh"""
         if fbx_path not in self.mesh_cache:
             mesh = self.fbx2mesh(fbx_path)
-            self.mesh_cache[fbx_path] = mesh
-        return self.mesh_cache[fbx_path]
-        
+            # self.mesh_cache[fbx_path] = mesh
+        # return self.mesh_cache[fbx_path]
+        return mesh
     def approximate_as_box_if_thin(self, mesh: trimesh.Trimesh, pitch: float) -> trimesh.Trimesh:
         """
-        如果网格在某个维度极其薄，则将其近似为一个长方体，最小厚度为 pitch，其他两维保持原始 bounding box 大小。
+        如果网格在某个维度极其薄，则其近似为一个长方体，最小厚度为 pitch，其他两维保持原始 bounding box 大小。
         """
         # 取网格的最小/最大边界
         min_corner, max_corner = mesh.bounds
@@ -149,86 +221,159 @@ class VoxelManager:
 
     def voxelize_object(self, mesh_path, instance_id, pose, scale=None):
         """
-        将物体mesh转换为体素网格。本示例在体素化前，先检查是否极薄并近似为长方体。
+        将物体mesh转换为体素网格，使用更密集采样来确保体素化的连续性。
         """
         if not self.scene_initialized:
             raise RuntimeError("Scene bounds not initialized. Call initialize_scene_bounds first.")
 
-        # 1. 加载并（可选）缩放网格
+        # 1. 加载（可选）缩放网格
         mesh = self.load_mesh(mesh_path)
         if scale is not None:
             mesh.apply_scale(scale)
 
         # 2. 应用姿态变换
         transform = np.array(pose)
-        mesh.apply_transform(transform)
+        mesh = mesh.apply_transform(transform)
 
-        # 3. 获取体素大小(以最小值为基准)
+        # 3. 获体素大小(以最小值为基准)
         pitch = float(min(self.voxel_size))
 
         # 4. 若某个维度过薄，则近似为长方体
         mesh = self.approximate_as_box_if_thin(mesh, pitch)
 
-        # 5. 现在再做体素化
-        voxels = mesh.voxelized(pitch=pitch, method='ray')
+        # 5. 使用更密集的采样进行体素化
+        voxels = mesh.voxelized(pitch=pitch, method='subdivide')
+        voxels = voxels.fill()
 
         # 后续将体素坐标映射到场景网格
         voxel_points = torch.from_numpy(voxels.points).float().cuda()
         relative_pos = voxel_points - torch.tensor(self.scene_bounds['min'], device='cuda')
         voxel_coords = (relative_pos / torch.tensor(self.voxel_size, device='cuda')).long()
+        
+        # 创建带padding的网格（每个维度前后各加5个单位）
+        grid = torch.zeros(self.resolution, dtype=torch.bool, device='cuda', requires_grad=False)
+        
+        # 确保所有坐标在有效范围内
         voxel_coords = torch.clamp(
             voxel_coords,
             torch.tensor(0, device='cuda'),
             torch.tensor(self.resolution, device='cuda') - 1
         )
-        # desktop_ornament_0 and tall_storage_cabinet_0
-        grid = torch.zeros(self.resolution, dtype=torch.bool, device='cuda', requires_grad=False)
+
         grid.index_put_(
             (voxel_coords[:, 0], voxel_coords[:, 1], voxel_coords[:, 2]),
             torch.ones(len(voxel_coords), dtype=torch.bool, device='cuda'),
             accumulate=True
         )
 
-        # 缓存并返回最终体素网格
+        # 缓���并返回最终体素网格
         self.voxel_grids[instance_id] = grid
         return grid
         
     def move_grid(self, instance_id, offset):
-        """移动体素网格
-        Args:
-            grid: 要移动的体素网格 (torch.Tensor)
-            offset: (dx, dy, dz) 移动量，以体素为单位
-        Returns:
-            移动后的网格
-        """
-        # print(offset)
+        """移动体素网格，如果移动会超出边界则返回 False"""
         dx, dy, dz = [int(round(o)) for o in offset]
-        # print(dx, dy, dz)
-        moved_grid = torch.roll(self.voxel_grids[instance_id], shifts=(dx, dy, dz), dims=(0, 1, 2))
-        # print(moved_grid.shape)
-        self.voxel_grids[instance_id] = moved_grid
+        grid = self.voxel_grids[instance_id]
         
+        # 首先检查移动量是否超出网格大小
+        if (abs(dx) >= grid.shape[0] or abs(dy) >= grid.shape[1] or abs(dz) >= grid.shape[2]):
+            return False
+        
+        # 检查移动是否会导致内容超出边界
+        if dx > 0:  # 右移，检查右边界
+            if torch.any(grid[grid.shape[0]-dx:]):  # 最右边dx个格子不能有内容
+                return False
+        elif dx < 0:  # 左移，检查左边界
+            if torch.any(grid[:abs(dx)]):  # 最左边|dx|个格子不能有内容
+                return False
+            
+        if dy > 0:  # 上移，检查上边界
+            if torch.any(grid[:, grid.shape[1]-dy:]):
+                return False
+        elif dy < 0:  # 下移，检查下边界
+            if torch.any(grid[:, :abs(dy)]):
+                return False
+            
+        if dz > 0:  # 前移，检查前边界
+            if torch.any(grid[:, :, grid.shape[2]-dz:]):
+                return False
+        elif dz < 0:  # ��移，检查后边界
+            if torch.any(grid[:, :, :abs(dz)]):
+                return False
+        
+        # 使用移位操作
+        if dx > 0:
+            grid = torch.cat([torch.zeros_like(grid[:dx]), grid[:-dx]], dim=0)
+        elif dx < 0:
+            grid = torch.cat([grid[-dx:], torch.zeros_like(grid[:-dx])], dim=0)
+        
+        if dy > 0:
+            grid = torch.cat([torch.zeros_like(grid[:, :dy]), grid[:, :-dy]], dim=1)
+        elif dy < 0:
+            grid = torch.cat([grid[:, -dy:], torch.zeros_like(grid[:, :-dy])], dim=1)
+        
+        if dz > 0:
+            grid = torch.cat([torch.zeros_like(grid[:, :, :dz]), grid[:, :, :-dz]], dim=2)
+        elif dz < 0:
+            grid = torch.cat([grid[:, :, -dz:], torch.zeros_like(grid[:, :, :-dz])], dim=2)
+        
+        self.voxel_grids[instance_id] = grid
+        return True
+
     def world_to_voxel_offset(self, world_offset):
-        """将世界坐标系的偏移转换为体素坐标系的偏移"""
+        """将世界坐标系的偏移转换为体坐标系的偏移"""
         return world_offset / self.voxel_size
 
-    def expand_mesh(self, mesh, thickness=0.01):
+    def visualize_voxels(self, instance_ids=None, show_all=False):
         """
-        对 mesh 做 Minkowski 膨胀，将其与一个半径为 thickness 的小球求和，
-        使结果在三维上有一个额外的"厚度"。
+        可视化体素网格
+        Args:
+            instance_ids: 指定要可视化的物体ID列表，如果为None且show_all=True则显示所有物体
+            show_all: 是否显示所有物体的体素
         """
-        # 创建一个半径为 thickness 的球
-        sphere = trimesh.creation.icosphere(subdivisions=2, radius=thickness)
-        # 计算 Minkowski sum
-        # 注意 trimesh.util.concatenate 只是把各部分合并为一个 mesh
-        expanded_list = mesh.minkowski_sum(sphere)
-        expanded = trimesh.util.concatenate(expanded_list)
-        return expanded
+        fig = plt.figure(figsize=(10, 10))
+        ax = fig.add_subplot(111, projection='3d')
+        
+        if show_all:
+            # 为不同物体随机分配颜色
+            colors = plt.cm.rainbow(np.linspace(0, 1, len(self.voxel_grids)))
+            for idx, (obj_id, grid) in enumerate(self.voxel_grids.items()):
+                occupied = grid.cpu().numpy()
+                x, y, z = np.where(occupied)
+                ax.scatter(x, y, z, c=[colors[idx]], alpha=0.6, label=obj_id)
+        elif instance_ids is not None:
+            # 确保 instance_ids 是列表
+            if isinstance(instance_ids, str):
+                instance_ids = [instance_ids]
+            
+            # 指定的物体分配颜色
+            colors = plt.cm.rainbow(np.linspace(0, 1, len(instance_ids)))
+            for idx, obj_id in enumerate(instance_ids):
+                if obj_id in self.voxel_grids:
+                    occupied = self.voxel_grids[obj_id].cpu().numpy()
+                    x, y, z = np.where(occupied)
+                    ax.scatter(x, y, z, c=[colors[idx]], alpha=0.6, label=obj_id)
+                else:
+                    print(f"Warning: {obj_id} not found in voxel grids")
+        else:
+            print("No valid instance_ids provided and show_all=False")
+            return
+        
+        ax.set_xlabel('X')
+        ax.set_ylabel('Y')
+        ax.set_zlabel('Z')
+        
+        if show_all or (instance_ids and len(instance_ids) > 1):
+            plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
+        
+        plt.title('Voxelized objects')
+        plt.tight_layout()
+        plt.savefig(f"voxel_visualization_{instance_ids}.png")
 
 
 class ObjManager:
     """
-    用于管理场景中所有物体以及执行优化流程:
+    用于管理场景中所有物体以及执行优化程:
      - 维护 Obj 列表并提供碰撞检测、重叠面积计算、移动距离计算、模拟退火等功能
     """
     def __init__(self):
@@ -247,7 +392,7 @@ class ObjManager:
     def load_data(self, base_dir):
         """
         从 placement_info_new.json 中加载数据，创建 Obj 实例并存储,
-        并初始化 voxel_manager
+        ���初始化 voxel_manager
         """
         with open(f"{base_dir}/placement_info_new.json", 'r') as f:
             placement_info = json.load(f)
@@ -255,7 +400,7 @@ class ObjManager:
         self.obj_info = placement_info["obj_info"]
         self.ground_name = placement_info["reference_obj"]
 
-        # 添加正则表达式模式
+        # 加正则表达式模式
         skip_pattern = re.compile(r'^(floor_\d+|wall_\d+|scene_camera)')
         
         for instance_id, info in self.obj_info.items():
@@ -268,12 +413,12 @@ class ObjManager:
             obj = Obj(instance_id, info)
             self.obj_dict[instance_id] = obj
 
-        self.voxel_manager.initialize_scene_bounds(self.obj_dict)
+        self.voxel_manager.initialize_scene_bounds(self.obj_dict,self.wall_dict)
         for instance_id, obj in self.obj_dict.items():
             print(obj.fbx_path,instance_id)
             mesh_path = Path(obj.fbx_path)
             pose = obj.pose_3d
-            self.voxel_manager.voxelize_object(mesh_path, instance_id,pose)
+            self.voxel_manager.voxelize_object(mesh_path, instance_id,pose,scale=[1.1,1.1,1.0])
 
     def build_bbox_items(self):
         """
@@ -288,7 +433,7 @@ class ObjManager:
     def init_overlap(self):
         """
         初始化 overlap_list，用于加速频繁的重叠检测:
-          - 使用 bbox 快速预筛选可能发生碰撞的物体对
+          - 使用 bbox 快速预筛选能发生碰撞的物体对
           - 如果两个物体的 bbox  z 轴或 x,y 平面上不可能重叠，就不放入 overlap_list
         """
         if self.initial_state:
@@ -325,7 +470,7 @@ class ObjManager:
                     continue
 
                 # 检查 x,y 平面上的距离
-                # 考虑到物体可能移动，在原始 bbox 基础上增加一定余量
+                # 考虑到物体可能动，在原始 bbox 基础上增加一定余量
                 margin_x = (bbox_j["length"][0] + bbox_i["length"][0]) * 0.5
                 margin_y = (bbox_j["length"][1] + bbox_i["length"][1]) * 0.5
                 
@@ -354,29 +499,47 @@ class ObjManager:
                 return idx
         return -1
 
-    def calc_overlap_area(self, debug_mode=False):
-        """使用体素化方法计算重叠，只检查预筛选的物体对"""
+    def calc_overlap_area(self, debug_mode=False, batch_size=4):
+        """使用体素化方法批量计算重叠，只检查预筛选的物体对"""
         total_overlap = 0
         bbox_items = self.build_bbox_items()
         
-        # 对需要检查的物体进行体素化
+        # 收集所有需要检查的物体对
+        pairs_to_check = []
         for i, overlap_indices in enumerate(self.overlap_list):
-            if not overlap_indices:  # 如果该物体没有潜在碰撞对象，跳过
+            if not overlap_indices:
                 continue
-            
             id_i = bbox_items[i][0]
-            grid_i = self.voxel_manager.voxel_grids[id_i]
-            
-            # 只查预筛选的物体对
             for j in overlap_indices:
                 id_j = bbox_items[j][0]
-                grid_j = self.voxel_manager.voxel_grids[id_j]
-                overlap = torch.logical_and(grid_i, grid_j).sum().item()
-                total_overlap += overlap
-                
-                if debug_mode and overlap > 0:
-                    print(f"Overlap between {id_i} and {id_j}: {overlap}")
-                
+                pairs_to_check.append((id_i, id_j))
+        
+        # 批量处理物体对
+        for start_idx in range(0, len(pairs_to_check), batch_size):
+            batch_pairs = pairs_to_check[start_idx:start_idx + batch_size]
+            
+            # 准备这个批次的网格
+            grids_1 = []
+            grids_2 = []
+            for id_1, id_2 in batch_pairs:
+                grids_1.append(self.voxel_manager.voxel_grids[id_1])
+                grids_2.append(self.voxel_manager.voxel_grids[id_2])
+            
+            # 将网格堆叠成批次
+            batch_grids_1 = torch.stack(grids_1)  # [batch_size, *grid_shape]
+            batch_grids_2 = torch.stack(grids_2)  # [batch_size, *grid_shape]
+            
+            # 批量计算重叠
+            batch_overlap = torch.logical_and(batch_grids_1, batch_grids_2).sum(dim=(1,2,3))
+            total_overlap += batch_overlap.sum().item()
+            
+            if debug_mode:
+                # 输出这个批次中有重叠的物体对
+                for idx, (id_1, id_2) in enumerate(batch_pairs):
+                    overlap = batch_overlap[idx].item()
+                    if overlap > 0:
+                        print(f"Overlap between {id_1} and {id_2}: {overlap}")
+        
         return total_overlap
 
     def calc_movement(self):
@@ -394,7 +557,7 @@ class ObjManager:
         """
         计算物体相对于其父物体的越界程度, 若出某个范围则产生罚分
         """
-        k = 3
+        k = 2
         cost = 0
         bbox_items = self.build_bbox_items()
 
@@ -413,7 +576,7 @@ class ObjManager:
             cx, cy = obj.current_pos
             length_x, length_y = obj.bounding_box["length"][0], obj.bounding_box["length"][1]
 
-            # 检查是否在父物体 bbox 的某个范围内(这里是简单示例, 可根据需要微调)
+            # 检查是否在父物体 bbox 的某个范围内(这里是简单示例, ��据需要微调)
             if (cx - length_x/k >= fa_bbox["min"][0] and
                 cx + length_x/k <= fa_bbox["max"][0] and
                 cy - length_y/k >= fa_bbox["min"][1] and
@@ -427,7 +590,7 @@ class ObjManager:
 
     def try_perturb_random_obj(self, iteration):
         """
-        在所有可优化物体中随机选一个物体, 对其 current_pos 进行一个体素大小的扰动.
+        在有可优化物体中随机选个物体, 对其 current_pos 行一个体素大小的扰动.
         随机选择 x 或 y 方向, 移动一个体素的距离 (正向或负向).
         返回一个 revert 回调, 用于在模拟退火不接受本次 perturbation 时撤销.
         """
@@ -448,12 +611,13 @@ class ObjManager:
         perturbation = np.zeros(2)
         voxel_perturbation = np.zeros(3)
         
+        # 添加随机整数 scale 因子 (1~5)
+        scale = np.random.randint(1, 6)  # randint(1, 6) 会生成 1,2,3,4,5
+        
         if move_x:
-            perturbation[0] = voxel_size[0] if move_positive else -voxel_size[0]
-            voxel_perturbation[0] = 1 if move_positive else -1
+            perturbation[0] = scale * voxel_size[0] if move_positive else -scale * voxel_size[0]
         else:
-            perturbation[1] = voxel_size[1] if move_positive else -voxel_size[1]
-            voxel_perturbation[1] = 1 if move_positive else -1
+            perturbation[1] = scale * voxel_size[1] if move_positive else -scale * voxel_size[1]
 
         # 如果该物体靠墙, 则仅在平行于墙的方向扰动
         wall_id = chosen_obj.is_against_wall
@@ -466,14 +630,17 @@ class ObjManager:
             normal_len = np.linalg.norm(normal_2d)
             if normal_len > 1e-9:
                 normal_2d = normal_2d / normal_len
-                # 去除在墙法向上的分量
+                # 去除在法向上的分量
                 dot_val = np.dot(perturbation, normal_2d)
                 perturbation = perturbation - dot_val * normal_2d
 
         # 应用扰动
+        voxel_perturbation = np.array([int(round(perturbation[0] / voxel_size[0])), int(round(perturbation[1] / voxel_size[1])), 0])
+        move_success = self.voxel_manager.move_grid(chosen_obj.instance_id, voxel_perturbation)
+        if not move_success:
+            return lambda: None
         chosen_obj.current_pos[0] += perturbation[0]
         chosen_obj.current_pos[1] += perturbation[1]
-        self.voxel_manager.move_grid(chosen_obj.instance_id, voxel_perturbation)
 
         # 返回撤销函数
         def revert():
@@ -485,10 +652,16 @@ class ObjManager:
 
     def simulated_annealing(self, initial_temp, alpha, max_iterations, penalty_factor):
         """
-        主优化流程, 不再使用批量 state, 而是直接在 obj 里存 current_pos.
+        主优化流程, 不再使用批量 state, 而是直接在 obj 里 current_pos.
         如果扰动不被接受, 就通过回调方式 revert.
         """
         M = 100  # overlap, constraints 的加权系数
+        # print(self.calc_overlap_area())
+        # self.voxel_manager.visualize_voxels(instance_ids=["guitar_1","tall_wardrobe_0","guitar_0"])
+        # self.voxel_manager.move_grid("guitar_1", [0,-15,0])
+        # print(self.calc_overlap_area())
+        # self.voxel_manager.visualize_voxels(instance_ids=["guitar_1","tall_wardrobe_0","guitar_0"])
+        # exit(0)
         current_energy = ( M*( self.calc_overlap_area() + self.calc_constraints() ) 
                            + self.calc_movement() )
         temperature = initial_temp
@@ -529,19 +702,23 @@ class ObjManager:
 
     def main(self, base_dir):
         """
-        执行主流程:
+        执行流程:
           1. 读取 placement_info_new.json
           2. 预处理并初始化 overlap
           3. 运行模拟退火
           4. 将结果写回 JSON
         """
         self.load_data(base_dir)
-        self.init_overlap()  # 准备 overlap_list
-
+        self.init_overlap()  # 准备 overlap_list1
         initial_temp = 100.0
         alpha = 0.99
         max_iterations = 10000
         penalty_factor = 1000.0
+        self.voxel_manager.visualize_voxels(instance_ids=["guitar_1","tall_wardrobe_0","guitar_0"])
+
+        # 添加可视化调用
+        print("Visualizing initial voxel grids...")
+        self.voxel_manager.visualize_voxels(show_all=True)
 
         final_energy = self.simulated_annealing(initial_temp, alpha, max_iterations, penalty_factor)
 
@@ -557,7 +734,11 @@ class ObjManager:
                 (obj.current_pos[1] - obj.original_pos[1])**2
             )
             print(inst_id, "移动距离:", moved_dist)
+        self.voxel_manager.visualize_voxels(instance_ids=["guitar_1","tall_wardrobe_0","guitar_0"])
 
+        # 添加可视化调用
+        print("Visualizing initial voxel grids...")
+        self.voxel_manager.visualize_voxels(show_all=True)
         print("Final Overlap:", self.calc_overlap_area(debug_mode=True))
         print("Final Constraints:", self.calc_constraints())
         print("Final Energy:", final_energy)

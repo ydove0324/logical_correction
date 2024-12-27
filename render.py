@@ -32,7 +32,7 @@ def align_object_z_to_world_z(obj):
     # 如果旋转轴非常小，说明已经对齐或需要 180 度旋转
     if rotation_axis.length < 1e-6:
         if local_z_axis.z > 0:
-            return  # 已经对齐，无需操作
+            return  # 已经对齐，无需操���
         else:
             # 需要 180 度旋转，选择 x 轴
             rotation_axis = Vector((1, 0, 0))
@@ -63,6 +63,16 @@ def render_scene(output_path, resolution_x=1920, resolution_y=1080):
     # 设置渲染引擎为 Cycles
     bpy.context.scene.render.engine = 'CYCLES'
     
+    # 调整场景整体亮度设置为更适中的值
+    bpy.context.scene.view_settings.exposure = 1.2  # 从 1.5 调整到 1.2
+    bpy.context.scene.view_settings.gamma = 1.1     # 从 1.2 调整到 1.1
+    
+    # # 如果场景中没有光源，添加一个环境光
+    if not any(obj.type == 'LIGHT' for obj in bpy.data.objects):
+        bpy.ops.object.light_add(type='SUN', location=(0, 0, 10))
+        sun = bpy.context.active_object
+        sun.data.energy = 3.5  # 从 5.0 调整到 3.5
+        
     # 配置 Cycles 设置
     cycles_prefs = bpy.context.preferences.addons['cycles'].preferences
     cycles_prefs.compute_device_type = 'CUDA'  # 或 'OPTIX' 如果使用 NVIDIA RTX 卡
@@ -131,6 +141,8 @@ def main(base_dir):
     for instance_id, info in obj_placement_info['obj_info'].items():
         if instance_id == ground_name or instance_id == scene_camera_name:
             continue  # 跳过
+        # if instance_id != "guitar_1" and instance_id != "guitar_0" and instance_id != "tall_wardrobe_0":
+        #     continue
 
         fbx_name = info['retrieved_asset']
         fbx_path = f"{base_fbx_path}/{fbx_name}.fbx"
@@ -142,7 +154,7 @@ def main(base_dir):
         if instance_id in final_pos:
             obj.location.x = final_pos[instance_id]['x']
             obj.location.y = final_pos[instance_id]['y']
-#        
+       
     # 更新场景
     bpy.context.view_layer.update()
     bpy.context.scene.camera = bpy.data.objects[scene_camera_name]
