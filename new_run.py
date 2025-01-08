@@ -176,11 +176,17 @@ class BlenderManager:
     def process_wall(self, wall_id, obj_info, obj_list, ground_name):
         """处理墙体位置"""
         min_penetration = float('0')
-        wall = obj_list[wall_id]
+        wall = obj_list[wall_id] 
+        ground = obj_list[ground_name]
+        ground_bbox = self.get_world_bound_box(ground)
+        ground_max_z = max(point.z for point in ground_bbox)
         wall_rotation = wall.rotation_euler.to_matrix()
         normal_vector = wall_rotation @ Vector((0, 0, 1))
+        
         normal_vector.z = 0  # Project to XY plane
         normal_vector.normalize()
+        wall_location = wall.location + ground_max_z * normal_vector
+        # print("wall_id",wall.location,wall_location)
         
         for instance_id, obj in obj_list.items():
             if re.match(r"wall_\d+", instance_id):
@@ -192,7 +198,7 @@ class BlenderManager:
             # Calculate penetration for each bbox point
             projections = []
             for point in obj_bbox:
-                diff_vector = point - wall.location
+                diff_vector = point - wall_location
                 projection = diff_vector.dot(normal_vector)
                 projections.append(projection)
             
